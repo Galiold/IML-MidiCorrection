@@ -5,15 +5,15 @@ import mido
 from keras import Sequential
 from keras.layers import Dense
 from mido import MidiFile
-import pandas as pd
-import os
+# import pandas as pd
+# import os
 import csv
 import glob as glob
 
 # %% Create train dataset
-with open('data/query-7.csv', mode='w') as csv_file:
+with open('data/train-prepared-7.csv', mode='w') as csv_file:
     csv_writer = csv.writer(csv_file)
-    for file in glob.glob('validation/query/*'):
+    for file in glob.glob('train/*'):
         mid = MidiFile(file)
         vector = []
         for track in mid.tracks:
@@ -22,25 +22,36 @@ with open('data/query-7.csv', mode='w') as csv_file:
                     vector.append(msg.note)
 
         for i in range(len(vector) - 6):
-            csv_writer.writerow(vector[i: i + 7])
+            window = vector[i: i + 7]
+            train = window[:3] + window[4:]
+            label = window[3]
+            csv_writer.writerow(train + [label])
 
 # %% Load data
-data = np.loadtxt('data/query-7.csv', delimiter=',')
-X = data[:, 3]  # label
+data = np.loadtxt('data/train-prepared-7.csv', delimiter=',')
+X = data[:, :6]
+Y = data[:, 6]
+
+label = np.zeros((len(Y), 128))
+for i, val in enumerate(Y):
+    label[i, int(val)] = 1
+
+label = label.astype('int16')
+
 
 # %% Create Model
 model = Sequential()
-model.add(Dense(7, input_dim=7, activation='relu'))
+model.add(Dense(7, input_dim=6, activation='relu'))
 model.add(Dense(14, activation='relu'))
 model.add(Dense(28, activation='relu'))
-model.add(Dense(56, activation='relu'))
+model.add(Dense(56, activation='sigmoid'))
 model.add(Dense(112, activation='relu'))
-model.add(Dense(1, activation='relu'))
+model.add(Dense(128, activation='softmax'))
 
-model.compile(loss='mse', optimizer='adam', metrics=['accuracy'])
+model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
 
 # %% Fit model
-model.fit(data, X, epochs=100, batch_size=64)
+model.fit(X, label, epochs=100, batch_size=64)
 
 # %%
 model.save('models/NN_first.h5')
